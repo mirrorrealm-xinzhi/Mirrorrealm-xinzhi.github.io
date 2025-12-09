@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Flashcard Flow Pro</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #6366f1;
+            --success: #10b981;
+            --danger: #ef4444;
+            --bg: #f8fafc;
+            --card-bg: #ffffff;
+            --text-main: #1e293b;
+            --text-sub: #64748b;
+        }
+
+        * { box-sizing: border-box; touch-action: none; -webkit-tap-highlight-color: transparent; }
+        
+        body {
+            margin: 0; font-family: 'Inter', sans-serif; background-color: var(--bg);
+            color: var(--text-main); height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+        }
+
+        .app-container {
+            width: 100%; max-width: 500px; margin: 0 auto; height: 100%;
+            display: flex; flex-direction: column; position: relative;
+        }
+
+        /* Header */
+        header { padding: 20px; display: flex; justify-content: space-between; align-items: center; z-index: 10; }
+        .btn-icon { background: white; border: 1px solid #e2e8f0; cursor: pointer; padding: 8px 12px; font-size: 1.2rem; border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .btn-icon:disabled { opacity: 0.3; cursor: default; }
+        .progress-pill { background: rgba(0,0,0,0.05); padding: 6px 16px; border-radius: 20px; font-size: 12px; font-weight: 600; color: var(--text-sub); }
+
+        /* Views */
+        .view { flex: 1; display: flex; flex-direction: column; padding: 20px; transition: opacity 0.3s; }
+        .hidden { display: none !important; }
+
+        /* Import Section */
+        .import-controls { display: flex; flex-direction: column; gap: 15px; height: 100%; }
+        textarea {
+            flex: 1; width: 100%; padding: 15px; border: 2px solid #e2e8f0;
+            border-radius: 12px; resize: none; font-family: monospace; font-size: 14px;
+        }
+        textarea:focus { outline: none; border-color: var(--primary); }
+        
+        .control-row { display: flex; gap: 10px; flex-wrap: wrap; }
+        .control-group { flex: 1; min-width: 150px; }
+        label { font-size: 12px; font-weight: 600; color: var(--text-sub); margin-bottom: 4px; display: block; }
+        
+        select { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #cbd5e1; background: white; font-size: 14px; }
+        
+        .primary-btn {
+            background-color: var(--primary); color: white; border: none; padding: 16px;
+            border-radius: 12px; font-weight: 600; font-size: 16px; cursor: pointer; width: 100%;
+        }
+        .secondary-btn {
+            background-color: white; color: var(--text-main); border: 1px solid #cbd5e1; padding: 12px;
+            border-radius: 12px; font-weight: 600; font-size: 14px; cursor: pointer; margin-top: 10px; width: 100%;
+        }
+        
+        /* Study Mode Buttons */
+        .mode-buttons {
+            display: flex; gap: 10px;
+        }
+        .mode-btn {
+            flex: 1; padding: 12px; border: 1px solid #cbd5e1; border-radius: 10px; 
+            background: white; cursor: pointer; font-size: 14px; text-align: center;
+        }
+        .mode-btn.active {
+            background-color: var(--primary); color: white; border-color: var(--primary);
+        }
+
+        /* Card Area */
+        .card-area {
+            flex: 1; position: relative; display: flex; align-items: center; justify-content: center;
+            perspective: 1500px; margin-bottom: 20px;
+        }
+
+        .card-stack-bg {
+            position: absolute; width: 85%; height: 60vh; background: white;
+            border-radius: 24px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+            opacity: 0.5; transform: translateY(15px) scale(0.95); z-index: 0;
+        }
+        .card-stack-bg.second { transform: translateY(30px) scale(0.9); opacity: 0.3; z-index: -1; }
+
+        /* The Wrapper */
+        .flashcard {
+            width: 90%; height: 60vh; position: relative; cursor: pointer; z-index: 5;
+            transition: transform 0.6s cubic-bezier(0.4, 0.2, 0.2, 1);
+            transform-style: preserve-3d;
+        }
+
+        /* The Inner */
+        .flashcard-inner {
+            position: relative; width: 100%; height: 100%; text-align: center;
+            transform-style: preserve-3d;
+        }
+        
+        .card-face {
+            position: absolute; width: 100%; height: 100%; backface-visibility: hidden;
+            border-radius: 24px; background: var(--card-bg);
+            box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            padding: 30px; user-select: none; border: 1px solid rgba(0,0,0,0.04);
+        }
+        
+        .card-front { transform: rotateY(0deg); z-index: 2; }
+        .card-back { transform: rotateY(180deg); background: #f8faff; z-index: 1; }
+        
+        .card-content { font-size: 24px; font-weight: 600; line-height: 1.5; overflow-y: auto; max-height: 100%; width: 100%; }
+        .card-hint { position: absolute; top: 20px; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-sub); opacity: 0.7; }
+
+        /* Overlays */
+        .status-overlay {
+            position: absolute; top: 40px; padding: 10px 20px; border: 4px solid;
+            border-radius: 8px; font-size: 2rem; font-weight: bold; text-transform: uppercase;
+            opacity: 0; z-index: 10; pointer-events: none; backface-visibility: hidden;
+        }
+        .status-like { right: 40px; color: var(--success); border-color: var(--success); transform: rotate(15deg); }
+        .status-nope { left: 40px; color: var(--danger); border-color: var(--danger); transform: rotate(-15deg); }
+
+        /* Controls */
+        .action-bar { display: flex; justify-content: center; gap: 20px; padding-bottom: 20px; }
+        .circle-btn {
+            width: 60px; height: 60px; border-radius: 50%; border: none; background: white;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1); cursor: pointer; font-size: 24px;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .btn-again { color: var(--danger); }
+        .btn-easy { color: var(--success); }
+        .btn-flip { color: var(--primary); font-size: 20px; }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <header>
+        <button id="navImport" class="btn-icon">⚙️</button>
+        <div class="progress-pill" id="progressIndicator">Flashcard Flow</div>
+        <button id="navUndo" class="btn-icon hidden" disabled>⏪</button>
+    </header>
+
+    <div id="importView" class="view">
+        <h1>Setup Deck</h1>
+        <div class="import-controls">
+            <input type="file" id="fileInput" accept=".csv, .txt, .md, .tsv" style="display:none;">
+            <button id="importFileBtn" class="secondary-btn" style="margin-top:0;">📂 Import Card File (CSV/MD)</button>
+
+            <textarea id="inputData" placeholder="Paste standard Markdown tables or CSV here.&#10;&#10;| Word | Meaning |&#10;| --- | --- |&#10;| Hello | Hola |"></textarea>
+            
+            <div class="control-row">
+                <div class="control-group">
+                    <label>Data Format</label>
+                    <select id="formatSelect">
+                        <option value="auto">Auto-detect</option>
+                        <option value="markdown">Markdown Table</option>
+                        <option value="csv">CSV</option>
+                        <option value="tab">Tab Separated</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label>Study Mode</label>
+                    <div class="mode-buttons">
+                        <button class="mode-btn active" data-mode="1" id="modeBtn1">Pass 1: Memorize</button>
+                        <button class="mode-btn" data-mode="2" id="modeBtn2">Pass 2: Recall</button>
+                    </div>
+                    <input type="hidden" id="modeSelect" value="1">
+                </div>
+            </div>
+            
+            <div class="control-row">
+                <button id="swapSidesBtn" class="secondary-btn" style="flex:1; margin-top:0;">↔️ Swap Front/Back</button>
+                <button id="startBtn" class="primary-btn" style="flex:2; margin-top:0;">Start Studying</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="studyView" class="view hidden">
+        <div class="card-area">
+            <div class="card-stack-bg second"></div>
+            <div class="card-stack-bg"></div>
+
+            <div class="flashcard" id="activeCard">
+                <div class="status-overlay status-nope">AGAIN</div>
+                <div class="status-overlay status-like">GOOD</div>
+                
+                <div class="flashcard-inner">
+                    <div class="card-face card-front">
+                        <div class="card-hint">Question</div>
+                        <div class="card-content" id="cardFrontText">...</div>
+                    </div>
+                    <div class="card-face card-back">
+                        <div class="card-hint">Answer</div>
+                        <div class="card-content" id="cardBackText">...</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="endScreen" class="hidden" style="text-align:center;">
+                <h2>All Done! 🎉</h2>
+                <p style="color:var(--text-sub); margin-bottom:20px;">What's next?</p>
+                <button onclick="advanceToNextPass()" class="primary-btn">Progress to Next Pass ➔</button>
+                <button onclick="swapRestart()" class="secondary-btn">Swap Sides & Restart ↺</button>
+                <button onclick="toggleView('import')" class="secondary-btn" style="border:none; color:var(--text-sub)">Back to Settings</button>
+            </div>
+        </div>
+
+        <div class="action-bar" id="actionBar">
+            <button class="circle-btn btn-again" id="btnAgain">✕</button>
+            <button class="circle-btn btn-flip" id="btnFlip">⟳</button>
+            <button class="circle-btn btn-easy" id="btnEasy">✓</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    /* --- State --- */
+    let cards = [];
+    let remaining = [];
+    let historyStack = [];
+    let currentPass = 1;
+    let isFlipped = false;
+    let isDragging = false;
+    let startX = 0;
+    let spoilerTimeout;
+
+    /* --- Elements --- */
+    const activeCard = document.getElementById('activeCard');
+    const undoBtn = document.getElementById('navUndo');
+    const overlays = { nope: document.querySelector('.status-nope'), like: document.querySelector('.status-like') };
+    const inputData = document.getElementById('inputData');
+    const formatSelect = document.getElementById('formatSelect');
+
+    /* --- Init --- */
+    document.getElementById('startBtn').addEventListener('click', parseAndStart);
+    document.getElementById('navImport').addEventListener('click', () => toggleView('import'));
+    document.getElementById('navUndo').addEventListener('click', undoLastAction);
+    
+    document.getElementById('btnFlip').addEventListener('click', manualFlip);
+    document.getElementById('btnAgain').addEventListener('click', () => animateSwipe('left'));
+    document.getElementById('btnEasy').addEventListener('click', () => animateSwipe('right'));
+    
+    // --- Setup Buttons ---
+    document.getElementById('swapSidesBtn').addEventListener('click', swapFrontAndBack);
+    document.getElementById('importFileBtn').addEventListener('click', () => document.getElementById('fileInput').click());
+    document.getElementById('fileInput').addEventListener('change', importFile);
+    
+    document.querySelectorAll('.mode-btn').forEach(button => {
+        button.addEventListener('click', setStudyMode);
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if(document.getElementById('studyView').classList.contains('hidden')) return;
+        if(['Space', 'ArrowUp', 'ArrowDown', 'Enter'].includes(e.code)) { e.preventDefault(); manualFlip(); } 
+        if(e.code === 'ArrowLeft') animateSwipe('left');
+        if(e.code === 'ArrowRight') animateSwipe('right');
+    });
+
+    /* --- Import/Setup Functions --- */
+    function parseInput(raw, format) {
+        if (!raw) return [];
+
+        if (format === 'auto') {
+            if (raw.includes('|') && raw.includes('---')) format = 'markdown';
+            else if (raw.includes('\t')) format = 'tab';
+            else if (raw.includes(',')) format = 'csv';
+            else format = 'space';
+        }
+
+        let parsed = [];
+        const lines = raw.split('\n');
+        
+        let headerIndex = -1;
+        if (format === 'markdown') {
+            lines.forEach((line, index) => {
+                if (line.includes('---') && line.includes('|')) headerIndex = index;
+            });
+        }
+
+        if (format === 'markdown') {
+            lines.forEach((line, index) => {
+                if (index === headerIndex || (headerIndex > -1 && index === headerIndex - 1)) return;
+                if (!line.includes('|')) return;
+                const parts = line.split('|').map(p => p.trim()).filter(p => p !== '');
+                if (parts.length >= 2) parsed.push({ front: parts[0], back: parts[1] });
+            });
+        } else {
+            const delimiter = format === 'csv' ? ',' : (format === 'tab' ? '\t' : null);
+            lines.forEach(line => {
+                if(!line.trim()) return;
+                let parts;
+                if(delimiter) parts = line.split(delimiter);
+                else {
+                    const match = line.match(/^(.+?)\s{2,}(.+)$/);
+                    if(match) parts = [match[1], match[2]];
+                    else parts = line.split(/\t/);
+                }
+                if (parts && parts.length >= 2) parsed.push({ front: parts[0].trim(), back: parts[1].trim() });
+            });
+        }
+        return parsed;
+    }
+
+    function setStudyMode(e) {
+        const mode = e.target.getAttribute('data-mode');
+        document.getElementById('modeSelect').value = mode;
+        document.getElementById('modeBtn1').classList.toggle('active', mode === '1');
+        document.getElementById('modeBtn2').classList.toggle('active', mode === '2');
+    }
+
+    function swapFrontAndBack() {
+        const raw = inputData.value.trim();
+        const format = formatSelect.value;
+        let cardList = parseInput(raw, format);
+
+        if (cardList.length === 0) {
+            alert("No cards found to swap. Please ensure your input is correct.");
+            return;
+        }
+
+        // 1. Swap the content
+        const swappedCards = cardList.map(c => ({ front: c.back, back: c.front }));
+
+        // 2. Reformat the content as a standard Markdown table
+        let output = "| Front | Back |\n| --- | --- |\n";
+        output += swappedCards.map(c => `| ${c.front} | ${c.back} |`).join('\n');
+        
+        inputData.value = output;
+        alert(`Successfully swapped ${swappedCards.length} card sides! Content is now displayed as a Markdown table.`);
+    }
+
+    function importFile(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            inputData.value = e.target.result;
+            // Optionally, try to guess format from extension
+            const ext = file.name.split('.').pop().toLowerCase();
+            if (ext === 'csv') formatSelect.value = 'csv';
+            else if (ext === 'md') formatSelect.value = 'markdown';
+            else if (ext === 'tsv') formatSelect.value = 'tab';
+        };
+        reader.readAsText(file);
+    }
+    
+    /* --- Core Study Logic --- */
+
+    function parseAndStart() {
+        const raw = inputData.value.trim();
+        const format = formatSelect.value;
+        const mode = document.getElementById('modeSelect').value;
+        
+        if (!raw) return alert("Please paste some text or import a file first!");
+
+        const parsed = parseInput(raw, format);
+
+        if (parsed.length === 0) return alert('No cards found! Check your format or input.');
+
+        cards = parsed;
+        remaining = [...cards];
+        currentPass = parseInt(mode);
+        historyStack = [];
+        
+        toggleView('study');
+        loadCard();
+    }
+
+    function toggleView(v) {
+        const isImport = v === 'import';
+        document.getElementById('importView').classList.toggle('hidden', !isImport);
+        document.getElementById('studyView').classList.toggle('hidden', isImport);
+        
+        // Hide Undo button on setup page
+        undoBtn.classList.toggle('hidden', isImport);
+    }
+
+
+    function handleStart(e) {
+        if(remaining.length === 0 || e.target.closest('button')) return;
+        isDragging = true;
+        startX = e.type.includes('mouse') ? e.clientX : e.touches[0].clientX;
+        activeCard.classList.remove('swiping');
+        activeCard.style.transition = 'none'; 
+    }
+
+    function handleMove(e) {
+        if(!isDragging) return;
+        const clientX = e.type.includes('mouse') ? e.clientX : e.touches[0].clientX;
+        const deltaX = clientX - startX;
+        const rotateZ = deltaX * 0.05; 
+        
+        const baseRotateY = isFlipped ? 180 : 0;
+        
+        activeCard.style.transform = `translateX(${deltaX}px) rotateY(${baseRotateY}deg) rotateZ(${rotateZ}deg)`;
+        
+        const opacity = Math.min(Math.abs(deltaX) / 100, 1);
+        overlays.like.style.opacity = deltaX > 0 ? opacity : 0;
+        overlays.nope.style.opacity = deltaX < 0 ? opacity : 0;
+    }
+
+    function handleEnd() {
+        if(!isDragging) return;
+        isDragging = false;
+        
+        const style = window.getComputedStyle(activeCard);
+        const matrix = new WebKitCSSMatrix(style.transform);
+        const deltaX = matrix.m41;
+
+        if(Math.abs(deltaX) > 100) {
+            completeSwipe(deltaX > 0 ? 'right' : 'left');
+        } else {
+            const baseRotateY = isFlipped ? 180 : 0;
+            activeCard.style.transition = 'transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
+            activeCard.style.transform = `translateX(0) rotateY(${baseRotateY}deg) rotateZ(0)`;
+            overlays.like.style.opacity = 0;
+            overlays.nope.style.opacity = 0;
+        }
+    }
+    
+    function manualFlip() {
+        if(remaining.length === 0) return;
+        clearTimeout(spoilerTimeout);
+        
+        activeCard.style.transition = 'transform 0.6s cubic-bezier(0.4, 0.2, 0.2, 1)'; 
+        
+        isFlipped = !isFlipped;
+        activeCard.classList.toggle('flipped', isFlipped);
+        
+        const rotateY = isFlipped ? 180 : 0;
+        activeCard.style.transform = `rotateY(${rotateY}deg)`;
+    }
+
+    function animateSwipe(direction) {
+        if(remaining.length === 0) return;
+        activeCard.classList.add('swiping');
+        const translate = direction === 'right' ? window.innerWidth : -window.innerWidth;
+        const rotateZ = direction === 'right' ? 30 : -30;
+        const baseRotateY = isFlipped ? 180 : 0;
+        
+        activeCard.style.transform = `translateX(${translate}px) rotateY(${baseRotateY}deg) rotateZ(${rotateZ}deg)`;
+        setTimeout(() => completeSwipe(direction), 200);
+    }
+
+    function completeSwipe(direction) {
+        const card = remaining.shift();
+        historyStack.push({ card: card, result: direction });
+        if(direction === 'left') remaining.push(card);
+
+        activeCard.style.transition = 'none';
+        activeCard.style.opacity = '0';
+        activeCard.style.transform = `translateX(0) rotateY(0deg)`;
+        
+        setTimeout(() => {
+            loadCard(); 
+        }, 50);
+    }
+
+    function loadCard() {
+        // 1. KILL ALL ANIMATIONS & RESET STATE INSTANTLY
+        activeCard.style.transition = 'none';
+        activeCard.classList.remove('swiping');
+        activeCard.classList.remove('flipped');
+        isFlipped = false;
+        clearTimeout(spoilerTimeout);
+        
+        overlays.like.style.opacity = 0;
+        overlays.nope.style.opacity = 0;
+        
+        undoBtn.disabled = historyStack.length === 0;
+
+        const cardStackBgs = document.querySelectorAll('.card-stack-bg');
+
+        if(remaining.length > 0) {
+            // STUDYING: Show all card elements
+            activeCard.classList.remove('hidden'); // SHOW card
+            cardStackBgs.forEach(el => el.classList.remove('hidden'));
+            
+            document.getElementById('cardFrontText').textContent = remaining[0].front;
+            document.getElementById('cardBackText').textContent = remaining[0].back;
+            document.getElementById('progressIndicator').textContent = `Pass ${currentPass} • ${remaining.length} Left`;
+            document.getElementById('actionBar').classList.remove('hidden');
+            document.getElementById('endScreen').classList.add('hidden');
+            
+
+            // 2. CHECK MODE
+            if (parseInt(currentPass) === 1) {
+                // --- PASS 1: SPOILER ---
+                activeCard.classList.add('flipped');
+                activeCard.style.transform = 'rotateY(180deg)';
+                isFlipped = true;
+                
+                void activeCard.offsetWidth;
+
+                requestAnimationFrame(() => {
+                    activeCard.style.transition = 'opacity 0.2s';
+                    activeCard.style.opacity = '1';
+                    
+                    setTimeout(() => {
+                        activeCard.style.transition = 'transform 0.6s cubic-bezier(0.4, 0.2, 0.2, 1)';
+                    }, 50);
+                });
+
+                // Auto-flip to Front after delay
+                spoilerTimeout = setTimeout(() => {
+                    if (isFlipped) {
+                        isFlipped = false;
+                        activeCard.classList.remove('flipped');
+                        activeCard.style.transform = 'rotateY(0deg)';
+                    }
+                }, 1200);
+
+            } else {
+                // --- PASS 2: STANDARD ---
+                activeCard.style.transform = 'rotateY(0deg)';
+                
+                void activeCard.offsetWidth;
+
+                // Fade In & Restore Transition
+                requestAnimationFrame(() => {
+                    activeCard.style.transition = 'opacity 0.2s, transform 0.6s cubic-bezier(0.4, 0.2, 0.2, 1)';
+                    activeCard.style.opacity = '1';
+                });
+            }
+        } else {
+            // COMPLETED: Hide all card elements
+            activeCard.classList.add('hidden'); // HIDE the card wrapper
+            cardStackBgs.forEach(el => el.classList.add('hidden')); 
+            
+            document.getElementById('actionBar').classList.add('hidden');
+            document.getElementById('endScreen').classList.remove('hidden');
+            document.getElementById('progressIndicator').textContent = 'Completed';
+        }
+    }
+
+    function undoLastAction() {
+        if (historyStack.length === 0) return;
+        const lastAction = historyStack.pop();
+        if (lastAction.result === 'left') remaining.pop();
+        remaining.unshift(lastAction.card);
+        loadCard(); 
+    }
+
+    function advanceToNextPass() {
+        currentPass = 2;
+        remaining = [...cards];
+        historyStack = [];
+        toggleView('study');
+        loadCard();
+    }
+
+    function swapRestart() {
+        cards = cards.map(c => ({front: c.back, back: c.front}));
+        remaining = [...cards];
+        historyStack = [];
+        loadCard();
+    }
+</script>
+</body>
+</html>
