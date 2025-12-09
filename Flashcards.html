@@ -146,7 +146,7 @@
     <div id="importView" class="view">
         <h1>Setup Deck</h1>
         <div class="import-controls">
-            <input type="file" id="fileInput" accept=".csv,.txt,.md,.tsv,text/*" style="display:none;">
+            <input type="file" id="fileInput" style="display:none;">
             <button id="importFileBtn" class="secondary-btn" style="margin-top:0;">📂 Import Card File (CSV/MD)</button>
 
             <textarea id="inputData" placeholder="Paste standard Markdown tables or CSV here.&#10;&#10;| Word | Meaning |&#10;| --- | --- |&#10;| Hello | Hola |"></textarea>
@@ -294,6 +294,7 @@
                 let parts;
                 if(delimiter) parts = line.split(delimiter);
                 else {
+                    // Space separated but handle trailing content
                     const match = line.match(/^(.+?)\s{2,}(.+)$/);
                     if(match) parts = [match[1], match[2]];
                     else parts = line.split(/\t/);
@@ -321,10 +322,7 @@
             return;
         }
 
-        // 1. Swap the content
         const swappedCards = cardList.map(c => ({ front: c.back, back: c.front }));
-
-        // 2. Reformat the content as a standard Markdown table
         let output = "| Front | Back |\n| --- | --- |\n";
         output += swappedCards.map(c => `| ${c.front} | ${c.back} |`).join('\n');
         
@@ -336,16 +334,28 @@
         const file = event.target.files[0];
         if (!file) return;
 
+        // Since we removed the HTML filter, we do a basic check here for user friendliness
+        const fileName = file.name.toLowerCase();
+        const isLikelyImage = /\.(jpg|jpeg|png|gif|webp)$/.test(fileName);
+        
+        if (isLikelyImage) {
+            alert("Warning: You selected an image file. This app expects text files (CSV, Markdown, or TXT). Parsing may fail.");
+        }
+
         const reader = new FileReader();
         reader.onload = (e) => {
             inputData.value = e.target.result;
-            // Optionally, try to guess format from extension
-            const ext = file.name.split('.').pop().toLowerCase();
+            // Guess format from extension
+            const ext = fileName.split('.').pop();
             if (ext === 'csv') formatSelect.value = 'csv';
-            else if (ext === 'md') formatSelect.value = 'markdown';
+            else if (ext === 'md' || ext === 'markdown') formatSelect.value = 'markdown';
             else if (ext === 'tsv') formatSelect.value = 'tab';
         };
+        // Read as text regardless of type to ensure we get data
         reader.readAsText(file);
+        
+        // Reset input so the same file can be selected again if needed
+        event.target.value = ''; 
     }
     
     /* --- Core Study Logic --- */
@@ -359,7 +369,7 @@
 
         const parsed = parseInput(raw, format);
 
-        if (parsed.length === 0) return alert('No cards found! Check your format or input.');
+        if (parsed.length === 0) return alert('No cards found! \n\nPlease ensure your file is a valid text file (CSV or Markdown table) and not an image/PDF.');
 
         cards = parsed;
         remaining = [...cards];
@@ -374,11 +384,18 @@
         const isImport = v === 'import';
         document.getElementById('importView').classList.toggle('hidden', !isImport);
         document.getElementById('studyView').classList.toggle('hidden', isImport);
-        
-        // Hide Undo button on setup page
         undoBtn.classList.toggle('hidden', isImport);
     }
 
+    // --- Interaction Handlers (Swipe/Touch) ---
+    // (Kept simple for clarity)
+    activeCard.addEventListener('touchstart', handleStart);
+    activeCard.addEventListener('touchmove', handleMove);
+    activeCard.addEventListener('touchend', handleEnd);
+    activeCard.addEventListener('mousedown', handleStart);
+    
+    document.addEventListener('mousemove', handleMove);
+    document.addEventListener('mouseup', handleEnd);
 
     function handleStart(e) {
         if(remaining.length === 0 || e.target.closest('button')) return;
@@ -393,7 +410,6 @@
         const clientX = e.type.includes('mouse') ? e.clientX : e.touches[0].clientX;
         const deltaX = clientX - startX;
         const rotateZ = deltaX * 0.05; 
-        
         const baseRotateY = isFlipped ? 180 : 0;
         
         activeCard.style.transform = `translateX(${deltaX}px) rotateY(${baseRotateY}deg) rotateZ(${rotateZ}deg)`;
@@ -425,12 +441,9 @@
     function manualFlip() {
         if(remaining.length === 0) return;
         clearTimeout(spoilerTimeout);
-        
         activeCard.style.transition = 'transform 0.6s cubic-bezier(0.4, 0.2, 0.2, 1)'; 
-        
         isFlipped = !isFlipped;
         activeCard.classList.toggle('flipped', isFlipped);
-        
         const rotateY = isFlipped ? 180 : 0;
         activeCard.style.transform = `rotateY(${rotateY}deg)`;
     }
@@ -461,7 +474,6 @@
     }
 
     function loadCard() {
-        // 1. KILL ALL ANIMATIONS & RESET STATE INSTANTLY
         activeCard.style.transition = 'none';
         activeCard.classList.remove('swiping');
         activeCard.classList.remove('flipped');
@@ -470,14 +482,12 @@
         
         overlays.like.style.opacity = 0;
         overlays.nope.style.opacity = 0;
-        
         undoBtn.disabled = historyStack.length === 0;
 
         const cardStackBgs = document.querySelectorAll('.card-stack-bg');
 
         if(remaining.length > 0) {
-            // STUDYING: Show all card elements
-            activeCard.classList.remove('hidden'); // SHOW card
+            activeCard.classList.remove('hidden');
             cardStackBgs.forEach(el => el.classList.remove('hidden'));
             
             document.getElementById('cardFrontText').textContent = remaining[0].front;
@@ -486,10 +496,7 @@
             document.getElementById('actionBar').classList.remove('hidden');
             document.getElementById('endScreen').classList.add('hidden');
             
-
-            // 2. CHECK MODE
             if (parseInt(currentPass) === 1) {
-                // --- PASS 1: SPOILER ---
                 activeCard.classList.add('flipped');
                 activeCard.style.transform = 'rotateY(180deg)';
                 isFlipped = true;
@@ -499,13 +506,11 @@
                 requestAnimationFrame(() => {
                     activeCard.style.transition = 'opacity 0.2s';
                     activeCard.style.opacity = '1';
-                    
                     setTimeout(() => {
                         activeCard.style.transition = 'transform 0.6s cubic-bezier(0.4, 0.2, 0.2, 1)';
                     }, 50);
                 });
 
-                // Auto-flip to Front after delay
                 spoilerTimeout = setTimeout(() => {
                     if (isFlipped) {
                         isFlipped = false;
@@ -513,24 +518,17 @@
                         activeCard.style.transform = 'rotateY(0deg)';
                     }
                 }, 1200);
-
             } else {
-                // --- PASS 2: STANDARD ---
                 activeCard.style.transform = 'rotateY(0deg)';
-                
                 void activeCard.offsetWidth;
-
-                // Fade In & Restore Transition
                 requestAnimationFrame(() => {
                     activeCard.style.transition = 'opacity 0.2s, transform 0.6s cubic-bezier(0.4, 0.2, 0.2, 1)';
                     activeCard.style.opacity = '1';
                 });
             }
         } else {
-            // COMPLETED: Hide all card elements
-            activeCard.classList.add('hidden'); // HIDE the card wrapper
+            activeCard.classList.add('hidden');
             cardStackBgs.forEach(el => el.classList.add('hidden')); 
-            
             document.getElementById('actionBar').classList.add('hidden');
             document.getElementById('endScreen').classList.remove('hidden');
             document.getElementById('progressIndicator').textContent = 'Completed';
