@@ -60,6 +60,9 @@
             background-color: white; color: var(--text-main); border: 1px solid #cbd5e1; padding: 12px;
             border-radius: 12px; font-weight: 600; font-size: 14px; cursor: pointer; margin-top: 10px; width: 100%;
         }
+
+        /* Helper Text */
+        .helper-text { font-size: 11px; color: var(--text-sub); text-align: center; margin-top: -5px; }
         
         /* Study Mode Buttons */
         .mode-buttons {
@@ -132,6 +135,11 @@
         .btn-again { color: var(--danger); }
         .btn-easy { color: var(--success); }
         .btn-flip { color: var(--primary); font-size: 20px; }
+        
+        /* Hidden Input Fix for iOS */
+        #fileInput {
+            opacity: 0; position: absolute; z-index: -1; width: 0.1px; height: 0.1px;
+        }
     </style>
 </head>
 <body>
@@ -146,8 +154,9 @@
     <div id="importView" class="view">
         <h1>Setup Deck</h1>
         <div class="import-controls">
-            <input type="file" id="fileInput" style="display:none;">
-            <button id="importFileBtn" class="secondary-btn" style="margin-top:0;">📂 Import Card File (CSV/MD)</button>
+            <input type="file" id="fileInput" accept="*/*">
+            <button id="importFileBtn" class="secondary-btn" style="margin-top:0;">📂 Import Card File</button>
+            <p class="helper-text">Select any CSV, MD, or TXT file.</p>
 
             <textarea id="inputData" placeholder="Paste standard Markdown tables or CSV here.&#10;&#10;| Word | Meaning |&#10;| --- | --- |&#10;| Hello | Hola |"></textarea>
             
@@ -294,7 +303,6 @@
                 let parts;
                 if(delimiter) parts = line.split(delimiter);
                 else {
-                    // Space separated but handle trailing content
                     const match = line.match(/^(.+?)\s{2,}(.+)$/);
                     if(match) parts = [match[1], match[2]];
                     else parts = line.split(/\t/);
@@ -334,12 +342,13 @@
         const file = event.target.files[0];
         if (!file) return;
 
-        // Since we removed the HTML filter, we do a basic check here for user friendliness
         const fileName = file.name.toLowerCase();
-        const isLikelyImage = /\.(jpg|jpeg|png|gif|webp)$/.test(fileName);
+        
+        // Check for non-text files since we forced accept="*/*"
+        const isLikelyImage = /\.(jpg|jpeg|png|gif|webp|pdf|mp4)$/.test(fileName);
         
         if (isLikelyImage) {
-            alert("Warning: You selected an image file. This app expects text files (CSV, Markdown, or TXT). Parsing may fail.");
+            alert("⚠️ Warning: This looks like an image or media file. This app only works with Text files (CSV, Markdown, TXT). Reading may fail.");
         }
 
         const reader = new FileReader();
@@ -351,10 +360,10 @@
             else if (ext === 'md' || ext === 'markdown') formatSelect.value = 'markdown';
             else if (ext === 'tsv') formatSelect.value = 'tab';
         };
-        // Read as text regardless of type to ensure we get data
+        // Read as text regardless of type
         reader.readAsText(file);
         
-        // Reset input so the same file can be selected again if needed
+        // Reset so you can select the same file again
         event.target.value = ''; 
     }
     
@@ -369,7 +378,7 @@
 
         const parsed = parseInput(raw, format);
 
-        if (parsed.length === 0) return alert('No cards found! \n\nPlease ensure your file is a valid text file (CSV or Markdown table) and not an image/PDF.');
+        if (parsed.length === 0) return alert('No cards found! \n\nPlease ensure your file contains text (like a list or table) and is not an image.');
 
         cards = parsed;
         remaining = [...cards];
@@ -388,7 +397,6 @@
     }
 
     // --- Interaction Handlers (Swipe/Touch) ---
-    // (Kept simple for clarity)
     activeCard.addEventListener('touchstart', handleStart);
     activeCard.addEventListener('touchmove', handleMove);
     activeCard.addEventListener('touchend', handleEnd);
